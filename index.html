@@ -9,6 +9,31 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.2/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; background: #f0f0f0; padding: 20px; }
+    /* Loader de envio */
+    #loader {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(255,255,255,0.8);
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 2000;
+    }
+    .loader-spinner {
+      border: 8px solid #f3f3f3;
+      border-top: 8px solid #007bff;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
     /* Recibo com largura A4 proporcional */
     #recibo {
       width: 210mm;
@@ -36,7 +61,6 @@
     .small { width: 50mm; }
     .medium { width: 80mm; }
     .large { width: 140mm; }
-    .full { width: calc(100% - 20px); }
     #recibo .valor-numero {
       position: absolute;
       top: 20mm;
@@ -47,29 +71,54 @@
       font-style: italic;
     }
     .assinatura { margin-top: 20mm; }
-    .assinatura-label { display: block; margin-bottom: 2mm; }
-    #signature-pad {
-      border: 1px solid #333;
-      width: 100%;
-      height: 30mm;
-      touch-action: none;
-      box-sizing: border-box;
-    }
-    button {
-      margin-top: 8px;
-      padding: 6px 12px;
+    .assinatura-section { margin-bottom: 8px; }
+    .assinatura-label { font-weight: bold; margin-right: 4px; }
+    /* Botões grandes e legíveis */
+    button, .modal-button {
+      margin-top: 12px;
+      padding: 12px 24px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 0.9em;
+      font-size: 1.2em;
     }
-    #clear-signature { background: #dc3545; color: #fff; }
     #send-button { background: #007bff; color: #fff; margin-right: 8px; }
-    #print-button { background: #28a745; color: #fff; }
-    @media print { button { display: none; } }
+    #print-button { background: #28a745; color: #fff; margin-right: 8px; }
+    #open-signature { background: #6c757d; color: #fff; }
+    /* Modal de assinatura */
+    #signature-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 3000;
+    }
+    #signature-container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      max-width: 90%;
+    }
+    #signature-modal-pad {
+      border: 1px solid #333;
+      width: 100%;
+      max-width: 500px;
+      height: 200px;
+    }
+    @media print { button, #open-signature { display: none; } }
   </style>
 </head>
 <body>
+  <!-- Loader de envio -->
+  <div id="loader">
+    <div class="loader-spinner"></div>
+    <div style="font-size:1.2em; font-style:italic; color:#555;">Por favor, aguarde...</div>
+  </div>
+
   <div id="recibo">
     <h1>
       RECIBO N.º <input type="text" id="numeroRecibo" class="receipt-input small" readonly>
@@ -91,128 +140,106 @@
       Caeté, <input type="text" id="dataInput" class="receipt-input medium" readonly>
     </p>
     <div class="assinatura">
-      <label class="assinatura-label">Assinatura:</label>
-      <canvas id="signature-pad"></canvas>
-      <button id="clear-signature">Limpar Assinatura</button>
-      <div>
+      <div class="assinatura-section">
         <span class="assinatura-label">Nome:</span>
-        <input type="text" id="assinanteNome" class="receipt-input full" placeholder="Nome completo">
+        <input type="text" id="assinanteNome" class="receipt-input medium" placeholder="Nome completo">
       </div>
-      <div>
+      <div class="assinatura-section">
         <span class="assinatura-label">CPF/CNPJ:</span>
-        <input type="text" id="assinanteCPF" class="receipt-input full" placeholder="CPF ou CNPJ">
+        <input type="text" id="assinanteCPF" class="receipt-input medium" placeholder="CPF ou CNPJ">
+      </div>
+      <div class="assinatura-section">
+        <span class="assinatura-label">Assinatura:</span>
+        <img id="assinatura-preview" style="display:none; max-width:150px; border:1px solid #333; vertical-align: middle;" />
+        <button id="open-signature">Assinar</button>
       </div>
     </div>
     <button id="send-button">Enviar o recibo</button>
     <button id="print-button" onclick="window.print()">Imprimir Recibo</button>
   </div>
 
+  <!-- Modal de Assinatura -->
+  <div id="signature-modal">
+    <div id="signature-container">
+      <canvas id="signature-modal-pad"></canvas><br>
+      <button class="modal-button" id="clear-signature-modal">Limpar</button>
+      <button class="modal-button" id="ok-signature">OK</button>
+      <button class="modal-button" id="cancel-signature">Cancelar</button>
+    </div>
+  </div>
+
   <script>
     const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzPmk1f3zZgPPOU2o4dgrl630iAAYRxK_paT6j2pkVhU52EIpqwseyaCvmkMSmw2pAM1w/exec';
+    const months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 
     document.addEventListener('DOMContentLoaded', () => {
       autoFillDateNumber();
       preencherCampos();
-      setupCanvas();
+      setupSignatureModal();
       document.getElementById('send-button').addEventListener('click', sendToDrive);
     });
 
     function autoFillDateNumber() {
-      const now = new Date();
-      const pad = n => String(n).padStart(2, '0');
-      const d = pad(now.getDate()), m = pad(now.getMonth() + 1), y = now.getFullYear();
-      const hh = pad(now.getHours()), mm = pad(now.getMinutes()), ss = pad(now.getSeconds());
-      document.getElementById('numeroRecibo').value = `${d}${m}${y}${hh}${mm}${ss}`;
-      const months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-      document.getElementById('dataInput').value =
-        `${d} de ${months[now.getMonth()]} de ${y}`;
+      const now = new Date(); const pad = n => String(n).padStart(2,'0');
+      const d=pad(now.getDate()), m=pad(now.getMonth()+1), y=now.getFullYear();
+      const hh=pad(now.getHours()), mm=pad(now.getMinutes()), ss=pad(now.getSeconds());
+      document.getElementById('numeroRecibo').value=`${d}${m}${y}${hh}${mm}${ss}`;
+      document.getElementById('dataInput').value=`${d} de ${months[now.getMonth()]} de ${y}`;
     }
 
     function preencherCampos() {
-      const p = new URLSearchParams(window.location.search);
-      if (p.has('valor')) {
-        const v = p.get('valor');
-        document.getElementById('valorNumero').value = v;
-        document.getElementById('valorExtenso').value = numeroPorExtenso(v);
-      }
-      if (p.has('proveniente'))
-        document.getElementById('provenienteInput').value = p.get('proveniente');
+      const p=new URLSearchParams(window.location.search);
+      if(p.has('valor')){const v=p.get('valor');document.getElementById('valorNumero').value=v;document.getElementById('valorExtenso').value=numeroPorExtenso(v);}      
+      if(p.has('proveniente'))document.getElementById('provenienteInput').value=p.get('proveniente');
+      if(p.has('data')){const [y,m2,d2]=p.get('data').split('-');document.getElementById('dataInput').value=`${parseInt(d2)} de ${months[parseInt(m2,10)-1]} de ${y}`;}
     }
 
     function numeroPorExtenso(str) {
-      const n = parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
-      const I = Math.floor(n), C = Math.round((n - I) * 100);
-      const U = ['', 'um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezesseis','dezessete','dezoito','dezenove'];
-      const D = ['', '', 'vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
-      const E = ['', 'cento','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
-      function ex(v) {
-        if (v < 20) return U[v];
-        if (v < 100) return D[Math.floor(v/10)] + (v%10 ? ' e '+U[v%10] : '');
-        if (v === 100) return 'cem';
-        const c = Math.floor(v/100), r = v%100;
-        return E[c] + (r ? ' e '+ex(r) : '');
-      }
-      function ext(v) {
-        if (v < 1000) return ex(v);
-        const mil = Math.floor(v/1000), r = v%1000;
-        let s = mil === 1 ? 'mil' : ex(mil)+' mil';
-        return r ? s + (r<100 ? ' e ' : ' ') + ex(r) : s;
-      }
-      const real = ext(I) + (I === 1 ? ' real' : ' reais');
-      const centavos = C ? ' e '+ex(C) + (C === 1 ? ' centavo' : ' centavos') : '';
-      return real + centavos;
+      const n=parseFloat(str.replace(/\./g,'').replace(',','.'))||0;
+      const I=Math.floor(n),C=Math.round((n-I)*100);
+      const U=['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezesseis','dezessete','dezoito','dezenove'];
+      const D=['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+      const E=['','cento','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+      function ex(v){if(v<20)return U[v];if(v<100)return D[Math.floor(v/10)]+(v%10?' e '+U[v%10]:'');if(v===100)return'cem';const c=Math.floor(v/100),r=v%100;return E[c]+(r?' e '+ex(r):'');}
+      function ext(v){if(v<1000)return ex(v);const mil=Math.floor(v/1000),r=v%1000;const s=mil===1?'mil':ex(mil)+' mil';return r?s+(r<100?' e ':' ')+ex(r):s;}
+      const real=ext(I)+(I===1?' real':' reais');const centavos=C?' e '+ex(C)+(C===1?' centavo':' centavos'):'';
+      return real+centavos;
     }
 
-    function setupCanvas() {
-      const canvas = document.getElementById('signature-pad');
-      const ctx = canvas.getContext('2d');
-      let drawing = false;
-      function resize() {
-        const data = canvas.toDataURL();
-        canvas.width = canvas.offsetWidth;
-        canvas.height = 120;
-        const img = new Image(); img.onload = ()=>ctx.drawImage(img,0,0); img.src = data;
-      }
-      window.addEventListener('resize', resize);
-      resize();
-      ['pointerdown','pointermove','pointerup','pointerleave'].forEach(evt => canvas.addEventListener(evt, e => {
-        if (evt === 'pointerdown') { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); }
-        if (evt === 'pointermove' && drawing) { ctx.lineTo(e.offsetX, e.offsetY); ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.stroke(); }
-        if (evt === 'pointerup' || evt === 'pointerleave') { drawing = false; }
-      }));
-      document.getElementById('clear-signature').onclick = () => ctx.clearRect(0,0,canvas.width,canvas.height);
+    function setupSignatureModal(){
+      const modal=document.getElementById('signature-modal');
+      const openBtn=document.getElementById('open-signature');
+      const okBtn=document.getElementById('ok-signature');
+      const cancelBtn=document.getElementById('cancel-signature');
+      const clearBtn=document.getElementById('clear-signature-modal');
+      const canvas=document.getElementById('signature-modal-pad');
+      const ctx=canvas.getContext('2d');let drawing=false;
+      openBtn.addEventListener('click',()=>{modal.style.display='flex';resizeCanvas();});
+      cancelBtn.addEventListener('click',()=>modal.style.display='none');
+      clearBtn.addEventListener('click',()=>ctx.clearRect(0,0,canvas.width,canvas.height));
+      okBtn.addEventListener('click',()=>{const dataUrl=canvas.toDataURL();const img=document.getElementById('assinatura-preview');img.src=dataUrl;img.style.display='inline-block';modal.style.display='none';});
+      ['pointerdown','pointermove','pointerup','pointerleave'].forEach(evt=>canvas.addEventListener(evt,e=>{if(evt==='pointerdown'){drawing=true;ctx.beginPath();ctx.moveTo(e.offsetX,e.offsetY);}if(evt==='pointermove'&&drawing){ctx.lineTo(e.offsetX,e.offsetY);ctx.strokeStyle='#000';ctx.lineWidth=2;ctx.stroke();}if(evt==='pointerup'||evt==='pointerleave'){drawing=false;}}));
+      function resizeCanvas(){const data=canvas.toDataURL();canvas.width=500;canvas.height=200;const imgLoad=new Image();imgLoad.onload=()=>ctx.drawImage(imgLoad,0,0);imgLoad.src=data;}
     }
 
-    async function sendToDrive() {
-      const sendBtn = document.getElementById('send-button');
-      const printBtn = document.getElementById('print-button');
-      const clearBtn = document.getElementById('clear-signature');
-      sendBtn.style.display = 'none';
-      printBtn.style.display = 'none';
-      clearBtn.style.display = 'none';
-      try {
-        const opt = {
-          margin: 0,
-          filename: `Recibo-${document.getElementById('numeroRecibo').value}.pdf`,
-          html2canvas: { scale: 2 },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-        const pdfBlob = await html2pdf().set(opt).from(document.getElementById('recibo')).outputPdf('blob');
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result.split(',')[1];
-          const resp = await fetch(WEB_APP_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ fileBase64: base64, filename: opt.filename }) });
-          const json = await resp.json();
-          alert(json.status === 'OK' ? 'REBIBO ENVIADO COM SUCESSO!' : 'Erro: ' + (json.message || ''));
-        };
+    async function sendToDrive(){
+      const loader=document.getElementById('loader');
+      const sendBtn=document.getElementById('send-button');
+      const printBtn=document.getElementById('print-button');
+      const openBtn=document.getElementById('open-signature');
+      // Exibe loader e oculta controles
+      loader.style.display='flex';
+      sendBtn.style.display='none';printBtn.style.display='none';openBtn.style.display='none';
+      try{
+        const opt={margin:0,filename:`Recibo-${document.getElementById('numeroRecibo').value}.pdf`,html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
+        const pdfBlob=await html2pdf().set(opt).from(document.getElementById('recibo')).outputPdf('blob');
+        const reader=new FileReader();reader.onload=async()=>{const base64=reader.result.split(',')[1];const resp=await fetch(WEB_APP_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({fileBase64:base64,filename:opt.filename})});const json=await resp.json();loader.style.display='none';alert(json.status==='OK'?'RECIBO ENVIADO COM SUCESSO!':'Erro: '+(json.message||''));};
         reader.readAsDataURL(pdfBlob);
-      } catch (e) {
-        console.error(e);
-        alert('Falha ao enviar: ' + e.message);
-      } finally {
-        sendBtn.style.display = 'inline-block';
-        printBtn.style.display = 'inline-block';
-        clearBtn.style.display = 'inline-block';
+      }catch(e){console.error(e);loader.style.display='none';alert('Falha ao enviar: '+e.message);}finally{
+        // Restaura controles
+        document.getElementById('send-button').style.display='inline-block';
+        document.getElementById('print-button').style.display='inline-block';
+        document.getElementById('open-signature').style.display='inline-block';
       }
     }
   </script>
