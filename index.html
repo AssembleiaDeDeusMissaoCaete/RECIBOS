@@ -3,13 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>Gerador de Recibo com Envio Controlado</title>
-  <!-- Fonte manuscrita -->
   <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
-  <!-- html2pdf.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.2/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; background: #f0f0f0; padding: 20px; }
-    /* Loader de envio */
     #loader {
       display: none;
       position: fixed;
@@ -34,7 +31,6 @@
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
-    /* Recibo com largura A4 proporcional */
     #recibo {
       width: 210mm;
       max-width: 100%;
@@ -70,11 +66,7 @@
       font-family: 'Patrick Hand', cursive;
       font-style: italic;
     }
-    .assinatura { margin-top: 20mm; }
-    .assinatura-section { margin-bottom: 8px; }
-    .assinatura-label { font-weight: bold; margin-right: 4px; }
-    /* Botões grandes e legíveis */
-    button, .modal-button {
+    button {
       margin-top: 12px;
       padding: 12px 24px;
       border: none;
@@ -83,99 +75,62 @@
       font-size: 1.2em;
     }
     #send-button { background: #007bff; color: #fff; margin-right: 8px; }
-    #print-button { background: #28a745; color: #fff; margin-right: 8px; }
-    #open-signature { background: #6c757d; color: #fff; }
-    /* Modal de assinatura */
-    #signature-modal {
-      display: none;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.5);
-      justify-content: center;
-      align-items: center;
-      z-index: 3000;
-    }
-    #signature-container {
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      text-align: center;
-      max-width: 90%;
-    }
-    #signature-modal-pad {
-      border: 1px solid #333;
-      width: 100%;
-      max-width: 500px;
-      height: 200px;
-    }
-    @media print { button, #open-signature { display: none; } }
+    #print-button { background: #28a745; color: #fff; }
+    .assinatura-section { margin-top: 12px; }
+    .assinatura-label { font-weight: bold; margin-right: 4px; }
+    @media print { button { display: none; } }
   </style>
 </head>
 <body>
-  <!-- Loader de envio -->
   <div id="loader">
     <div class="loader-spinner"></div>
     <div style="font-size:1.2em; font-style:italic; color:#555;">Por favor, aguarde...</div>
   </div>
-
   <div id="recibo">
-    <h1>
-      RECIBO N.º <input type="text" id="numeroRecibo" class="receipt-input small" readonly>
-    </h1>
-    <div class="valor-numero">
-      R$ <input type="text" id="valorNumero" class="receipt-input small" readonly>
+    <h1>RECIBO N.º <input type="text" id="numeroRecibo" class="receipt-input small" readonly></h1>
+    <div class="valor-numero">R$ <input type="text" id="valorNumero" class="receipt-input small" readonly></div>
+    <p>Recebi(emos) de <strong>Assembleia de Deus – Caeté – MG</strong>, residente à Rua do Rosário, nº 92 – Bairro Centro – CNPJ 12.086.579/0001-36, a importância de <input type="text" id="valorExtenso" class="receipt-input large" readonly></p>
+    <p>Proveniente de <input type="text" id="provenienteInput" class="receipt-input medium" readonly></p>
+    <p>Para maior clareza firmo o presente.</p>
+    <p>Caeté, <input type="text" id="dataInput" class="receipt-input medium" readonly></p>
+    <div class="assinatura-section">
+      <span class="assinatura-label">Nome:</span>
+      <input type="text" id="assinanteNome" class="receipt-input medium" placeholder="Clique para escrever seu nome">
     </div>
-    <p>
-      Recebi(emos) de <strong>Assembleia de Deus – Caeté – MG</strong>, residente à Rua do Rosário, nº 92 – Bairro Centro – CNPJ 12.086.579/0001-36,
-      a importância de <input type="text" id="valorExtenso" class="receipt-input large" readonly>
-    </p>
-    <p>
-      Proveniente de <input type="text" id="provenienteInput" class="receipt-input medium" readonly>
-    </p>
-    <p>
-      Para maior clareza firmo o presente.
-    </p>
-    <p>
-      Caeté, <input type="text" id="dataInput" class="receipt-input medium" readonly>
-    </p>
-    <div class="assinatura">
-      <div class="assinatura-section">
-        <span class="assinatura-label">Nome:</span>
-        <input type="text" id="assinanteNome" class="receipt-input medium" placeholder="Clique para escrever seu nome">
-      </div>
-      <div class="assinatura-section">
-        <span class="assinatura-label">CPF/CNPJ:</span>
-        <input type="text" id="assinanteCPF" class="receipt-input medium" placeholder="Clique para informar o CPF ou CNPJ">
-      </div>
-      <div class="assinatura-section">
-        <span class="assinatura-label">Assinatura:</span>
-        <img id="assinatura-preview" style="display:none; max-width:150px; border:1px solid #333; vertical-align: middle;" />
-        <button id="open-signature">Assinar</button>
-      </div>
+    <div class="assinatura-section">
+      <span class="assinatura-label">CPF/CNPJ:</span>
+      <input type="text" id="assinanteCPF" class="receipt-input medium" placeholder="Clique para informar o CPF ou CNPJ">
     </div>
     <button id="send-button">Enviar o recibo</button>
     <button id="print-button" onclick="window.print()">Imprimir Recibo</button>
   </div>
-
-  <!-- Modal de Assinatura -->
-  <div id="signature-modal">
-    <div id="signature-container">
-      <canvas id="signature-modal-pad"></canvas><br>
-      <button class="modal-button" id="clear-signature-modal">Limpar</button>
-      <button class="modal-button" id="ok-signature">OK</button>
-      <button class="modal-button" id="cancel-signature">Cancelar</button>
-    </div>
-  </div>
-
   <script>
+    function verificarExpiracao() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('exp')) {
+        const expiracao = parseInt(params.get('exp'));
+        const agora = Date.now();
+        const umaHora = 3600000;
+        if (isNaN(expiracao) || agora > (expiracao + umaHora)) {
+          document.body.innerHTML = `
+            <div style="display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(145deg, #f8f9fa, #e9ecef); font-family: Arial, sans-serif;">
+              <div style="background: white; border: 1px solid #ccc; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 90%;">
+                <h1 style="color: #dc3545; margin-bottom: 16px;">🔒 Link Expirado</h1>
+                <p style="font-size: 1.2em; color: #333;">Este link não está mais disponível.<br>Solicite um novo para continuar.</p>
+              </div>
+            </div>`;
+          throw new Error("Link expirado");
+        }
+      }
+    }
+    verificarExpiracao();
+
     const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzPmk1f3zZgPPOU2o4dgrl630iAAYRxK_paT6j2pkVhU52EIpqwseyaCvmkMSmw2pAM1w/exec';
     const months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 
     document.addEventListener('DOMContentLoaded', () => {
       autoFillDateNumber();
       preencherCampos();
-      setupSignatureModal();
       document.getElementById('send-button').addEventListener('click', sendToDrive);
     });
 
@@ -206,40 +161,20 @@
       return real+centavos;
     }
 
-    function setupSignatureModal(){
-      const modal=document.getElementById('signature-modal');
-      const openBtn=document.getElementById('open-signature');
-      const okBtn=document.getElementById('ok-signature');
-      const cancelBtn=document.getElementById('cancel-signature');
-      const clearBtn=document.getElementById('clear-signature-modal');
-      const canvas=document.getElementById('signature-modal-pad');
-      const ctx=canvas.getContext('2d');let drawing=false;
-      openBtn.addEventListener('click',()=>{modal.style.display='flex';resizeCanvas();});
-      cancelBtn.addEventListener('click',()=>modal.style.display='none');
-      clearBtn.addEventListener('click',()=>ctx.clearRect(0,0,canvas.width,canvas.height));
-      okBtn.addEventListener('click',()=>{const dataUrl=canvas.toDataURL();const img=document.getElementById('assinatura-preview');img.src=dataUrl;img.style.display='inline-block';modal.style.display='none';});
-      ['pointerdown','pointermove','pointerup','pointerleave'].forEach(evt=>canvas.addEventListener(evt,e=>{if(evt==='pointerdown'){drawing=true;ctx.beginPath();ctx.moveTo(e.offsetX,e.offsetY);}if(evt==='pointermove'&&drawing){ctx.lineTo(e.offsetX,e.offsetY);ctx.strokeStyle='#000';ctx.lineWidth=2;ctx.stroke();}if(evt==='pointerup'||evt==='pointerleave'){drawing=false;}}));
-      function resizeCanvas(){const data=canvas.toDataURL();canvas.width=500;canvas.height=200;const imgLoad=new Image();imgLoad.onload=()=>ctx.drawImage(imgLoad,0,0);imgLoad.src=data;}
-    }
-
     async function sendToDrive(){
       const loader=document.getElementById('loader');
       const sendBtn=document.getElementById('send-button');
       const printBtn=document.getElementById('print-button');
-      const openBtn=document.getElementById('open-signature');
-      // Exibe loader e oculta controles
       loader.style.display='flex';
-      sendBtn.style.display='none';printBtn.style.display='none';openBtn.style.display='none';
+      sendBtn.style.display='none';printBtn.style.display='none';
       try{
         const opt={margin:0,filename:`Recibo-${document.getElementById('numeroRecibo').value}.pdf`,html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
         const pdfBlob=await html2pdf().set(opt).from(document.getElementById('recibo')).outputPdf('blob');
         const reader=new FileReader();reader.onload=async()=>{const base64=reader.result.split(',')[1];const resp=await fetch(WEB_APP_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({fileBase64:base64,filename:opt.filename})});const json=await resp.json();loader.style.display='none';alert(json.status==='OK'?'RECIBO ENVIADO COM SUCESSO!':'Erro: '+(json.message||''));};
         reader.readAsDataURL(pdfBlob);
       }catch(e){console.error(e);loader.style.display='none';alert('Falha ao enviar: '+e.message);}finally{
-        // Restaura controles
         document.getElementById('send-button').style.display='inline-block';
         document.getElementById('print-button').style.display='inline-block';
-        document.getElementById('open-signature').style.display='inline-block';
       }
     }
   </script>
